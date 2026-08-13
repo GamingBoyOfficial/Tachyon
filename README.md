@@ -230,3 +230,5 @@ AGPL-3.0. See [LICENSE](LICENSE). Commercial use requires a separate license fro
 
 **Parikshit Sharma** — [@GamingBoyOfficial](https://github.com/GamingBoyOfficial)
 DOI: [10.5281/zenodo.21920230](https://doi.org/10.5281/zenodo.21920230)
+
+*“Latency is the ultimate edge. Tachyon gives it to you.”*
