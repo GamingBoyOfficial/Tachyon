@@ -103,3 +103,9 @@ struct MyPlugin : tachyon::FeaturePlugin {
         output[start_idx] = (book.ask_prices[0] - book.bid_prices[0]) * 100.0f;
     }
 };
+
+**Streamlit dashboard (Python batch):**
+![Tachyon Dashboard](docs/images/dashboard.png)
+
+**Pure C++ live capture (uncheatable benchmark):**
+![Live Capture Benchmark](docs/images/live_capture.png)
