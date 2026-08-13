@@ -1,0 +1,3 @@
+# Contributor License Agreement
+
+By submitting a contribution to Tachyon, you grant Parikshit Sharma (GamingBoyOfficial) a perpetual, worldwide, non‑exclusive, royalty‑free license to use, modify, and distribute your contribution as part of Tachyon. You agree that your contribution may be re‑licensed under any license chosen by the project owner, including proprietary licenses. You confirm that you have the right to make this grant.
