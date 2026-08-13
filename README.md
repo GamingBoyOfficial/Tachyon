@@ -1,5 +1,7 @@
 # TACHYON: Ultra-Low-Latency Microstructure Feature Engine
 
+[![DOI](https://zenodo.org/badge/DOI/10.5281/zenodo.21920230.svg)](https://doi.org/10.5281/zenodo.21920230)
+
 "I engineered a zero-copy, SIMD-vectorized feature engineering kernel in C++23
 that computes 32 microstructure features directly from raw UDP packets in under
 450 nanoseconds—3x faster than industry-standard Python/Cython pipelines. By
