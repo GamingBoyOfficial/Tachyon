@@ -84,11 +84,67 @@ Performance scales **linearly with CPU clock speed**. Benchmarks above were meas
 
 ---
 
+## 📸 Visual Proof
+
 **Streamlit dashboard (Python batch):**
 ![Tachyon Dashboard](docs/images/dashboard.png)
 
 **Pure C++ live capture (uncheatable benchmark):**
 ![Live Capture Benchmark](docs/images/live_capture.png)
+
+---
+
+## 🚀 Quick Start (Windows + MinGW)
+
+### 1. Clone the repository
+```bash
+git clone https://github.com/GamingBoyOfficial/Tachyon.git
+cd Tachyon
+```
+
+### 2. Build in Release mode
+```bash
+mkdir build && cd build
+cmake .. -G "MinGW Makefiles" -DCMAKE_BUILD_TYPE=Release
+cmake --build .
+cd ..
+```
+
+### 3. Run the uncheatable benchmark (pure C++, no Python)
+```bash
+./build/tachyon_live.exe sample_synthetic.ITCH
+```
+
+Expected output:
+```
+Cycles/packet : 150.0
+Approx ns/pkt : 50.0 (assuming 3.0 GHz)
+Throughput : 20.01 M pkts/s (if 3 GHz)
+```
+
+### 4. Run the full P50/P99 benchmark
+```bash
+./build/tachyon_bench.exe
+```
+
+### 5. Run the plugin demo
+```bash
+./build/tachyon_plugin_demo.exe
+```
+
+### 6. Streamlit visual demo (optional, requires Python)
+```bash
+pip install streamlit pybind11 numpy pandas
+cd build
+cmake --build .   # builds tachyon_core.pyd
+cp tachyon_core.cp3XX-win_amd64.pyd ../tachyon_core.pyd
+cd ..
+streamlit run app.py
+```
+
+Then upload `sample_synthetic.ITCH` in the browser.
+
+---
 
 ## 🔌 Plugin System — Become Part of the Root
 
@@ -109,3 +165,97 @@ struct MyPlugin : tachyon::FeaturePlugin {
         output[start_idx] = (book.ask_prices[0] - book.bid_prices[0]) * 100.0f;
     }
 };
+```
+
+Register it before running:
+
+```cpp
+tachyon::FeaturePluginRegistry::add(std::make_unique<MyPlugin>());
+```
+
+### Feed Plugins
+Implement `FeedPlugin` to parse custom wire protocols (e.g., different exchange feeds). The built‑in `ItchParser` is just one implementation.
+
+Contributions are welcome under the [Contributor License Agreement](CLA.md). All contributors assign copyright to the project owner, ensuring Tachyon remains a unified, legally protected platform.
+
+---
+
+## 🏗 Architecture
+
+```
+┌─────────────┐     ┌─────────────┐     ┌──────────────┐
+│  UDP / File  │────▶│ ItchParser  │────▶│  Calculator  │
+│  (raw bytes) │     │ (zero‑copy) │     │  (32 feats)  │
+└─────────────┘     └─────────────┘     └──────┬───────┘
+                                                │
+                                         ┌──────▼───────┐
+                                         │  SPSC Ring   │
+                                         │  (lock‑free) │
+                                         └──────┬───────┘
+                                                │
+                                         ┌──────▼───────┐
+                                         │  Consumer    │
+                                         │  (Python/    │
+                                         │   C++ model) │
+                                         └──────────────┘
+```
+
+- **Zero‑copy** ITCH parser (reinterpret_cast + byteswap)
+- **Cache‑line aligned** feature vector (256 bytes, expandable)
+- **Lock‑free SPSC** ring buffer (no false sharing)
+- **Double‑buffered** order book state
+- **Zero heap allocations** on the hot path
+
+---
+
+## 🧪 Testing & Benchmarking
+
+Run the unit tests:
+```bash
+./tachyon_tests.exe
+```
+
+Run the uncheatable benchmark (pure rdtsc, no Python):
+```bash
+./tachyon_live.exe sample_synthetic.ITCH
+```
+
+Run the Google Benchmark suite (if built):
+```bash
+./tachyon_bench.exe
+```
+
+---
+
+## 🤝 Contributing
+
+Tachyon is open to contributions. Before submitting a pull request, please read:
+
+- [Contributor License Agreement](CLA.md) – required for all contributions.
+- [Code of Conduct](CODE_OF_CONDUCT.md) – be excellent to each other.
+
+All contributions are assigned to the project owner to protect the project’s future.
+
+---
+
+## 🛡 Security
+
+If you discover a security vulnerability, please **do not** open a public issue. Instead, contact the maintainer directly: [GamingBoyOfficial](https://github.com/GamingBoyOfficial) or via email.
+
+---
+
+## 📜 License
+
+Tachyon is licensed under the **GNU Affero General Public License v3 (AGPL‑3.0)**.  
+See [LICENSE](LICENSE) for details.  
+Commercial use requires a separate license from the copyright holder.
+
+---
+
+## 🌍 Author
+
+**Parikshit Sharma**  
+GitHub: [@GamingBoyOfficial](https://github.com/GamingBoyOfficial)  
+DOI: [10.5281/zenodo.21920230](https://doi.org/10.5281/zenodo.21920230)
+
+*"Latency is the ultimate edge. Tachyon gives it to you."*
