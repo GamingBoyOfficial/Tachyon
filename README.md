@@ -1,138 +1,128 @@
-# ⚡ TACHYON — The World's Fastest Microstructure Feature Engine
+# ⚡ Tachyon — A Zero-Copy, SIMD Microstructure Feature Engine
 
 [![DOI](https://zenodo.org/badge/DOI/10.5281/zenodo.21920230.svg)](https://doi.org/10.5281/zenodo.21920230)
 [![License: AGPL v3](https://img.shields.io/badge/License-AGPL%20v3-blue.svg)](https://www.gnu.org/licenses/agpl-3.0)
 [![C++23](https://img.shields.io/badge/C%2B%2B-23-blue.svg)](https://en.wikipedia.org/wiki/C%2B%2B23)
 [![AVX2](https://img.shields.io/badge/CPU-AVX2%20%2B%20FMA-orange.svg)](#)
 
-**"Faster than the speed of light."**
+Tachyon is a header-only C++23 engine that parses raw ITCH market-data packets and computes 32 microstructure features (EWMA price, order flow imbalance, VPIN, micro-price, book pressure, and others) inline during parsing — zero heap allocations, zero-copy packet reads, lock-free ring buffer, AVX2/FMA SIMD.
 
-Tachyon is a header‑only C++23 engine that computes **32 real microstructure features** directly from raw ITCH packets in **50 nanoseconds per packet** — **10× below the 450 ns HFT latency target**, and over **1000× faster** than Python/Cython pipelines. Zero heap allocations. Lock‑free. AVX2 + FMA. Plugin‑extensible. Built to be the **Linux of HFT microstructure engines**.
-
-Created by **Parikshit Sharma** ([@GamingBoyOfficial](https://github.com/GamingBoyOfficial)).
+Built by **Parikshit Sharma** ([@GamingBoyOfficial](https://github.com/GamingBoyOfficial)), a 3rd-year undergraduate, as a systems-programming project exploring how far single-machine C++ can go on this kind of workload.
 
 ---
 
-## 🔥 Performance — Measured, Not Promised
+## What this is, and isn't
 
-| Metric | Value |
-|--------|-------|
-| Parse + 32 features (single packet) | **50 ns** |
-| P50 latency (standalone benchmark) | **130 cycles (43 ns)** |
-| P99 latency (standalone benchmark) | **142 cycles (47 ns)** |
-| File replay throughput | **20 million packets / second** |
-| Python batch (8,386 packets) | **170 ns/packet** |
+This is a **working prototype benchmarked on a single sample ITCH file of unknown provenance, on one laptop.** The numbers below are real measurements from that setup, not claims about production HFT performance, and not comparisons against any named firm or product. Treat every number here as "what I measured, once, on my machine" until it's been reproduced elsewhere — I haven't yet run this against multiple files, multiple machines, or any external baseline, and I'm not going to claim it's the fastest anything until that's done.
 
-> At 10‑Gbps line rate, 50 ns is the time between two back‑to‑back packets.  
-> Tachyon processes the market **faster than the wire can deliver data**.
+If you have HFT/quant infra experience and want to poke holes in this, please do — open an issue. That's how this gets from "promising" to "trustworthy."
 
 ---
 
-## ✨ Why Tachyon Exists
+## Measured performance (single file, single machine)
 
-Modern HFT and quant firms spend 80% of their critical path latency just *preparing* data for their models. They parse in C++, copy to Python, compute features, and copy back — losing **2–5 microseconds per trade**. Tachyon eliminates that waste. It computes 32 microstructure features directly inside the C++ packet parser, using SIMD and zero‑copy data flow.
+Two separate measurement paths exist in this repo, and they measure different things — don't compare them directly:
 
-**The result:** Your model sees market reality 4–5 packets earlier than competitors using Python/Cython pipelines. In HFT, that's the difference between winning and losing.
+| Path | What it measures | Result |
+|---|---|---|
+| `tachyon_live` (pure C++, `rdtsc`-based) | Core engine only: parse + compute 32 features, per packet | **138.2 cycles/packet ≈ 46.1 ns** (@ 3.0 GHz, one file, one run) |
+| `tachyon_bench` (Google Benchmark) | Core engine, P50/P99 across repeated runs | P50: 130 cycles (43 ns) · P99: 142 cycles (47 ns) |
+| Streamlit demo (`app.py`, pybind11) | Core engine **plus** Python binding overhead, file I/O, and UI-driven batch timing | **169.6 ns/packet** (8,386 packets) |
 
----
+Test file: `sample.ITCH` / `sample_synthetic.ITCH`, 294.8 KB, 8,386 packets. Source of the sample data is not verified — treat any absolute latency figure with that caveat until it's tested against multiple, sourced datasets.
 
-## 🧠 The 32 Microstructure Features (Alpha Pipeline)
+The ~4x gap between the raw C++ path and the Streamlit path is the Python/pybind11 boundary crossing, file I/O, and Streamlit's own execution overhead — not a discrepancy in the core engine. **The core-engine number is ~46–50 ns/packet; the Python demo path is ~170 ns/packet.** If you only quote one number, quote the one for the layer you're actually describing.
 
-All features are computed with AVX2 FMA and branchless logic. No fillers, no duplicates:
+CPU-frequency scaling below is a rough linear projection from the 3.0 GHz measurement, not independently measured at 4.0/5.0 GHz — actual scaling is nonlinear in practice (memory latency and branch prediction don't scale with clock speed), so treat this as a ballpark, not a spec:
 
-- EWMA Price, OFI, Realized Volatility, Tick Rule  
-- Book Pressure, Spread‑to‑Vol, Micro‑Price, Depth Decay  
-- Bid‑Ask Balance, Weighted Mid, Order Book Slope  
-- Liquidity Imbalance, VWAP, Trade Imbalance  
-- Cumulative Depth (Bid/Ask), Effective/Quoted Spread  
-- Log Return, Skew, Kurtosis, Price Impact  
-- Order Flow Toxicity, VPIN, Volatility‑of‑Vol  
-- Mid Price Range, Bid‑Ask Cross, Depth‑Weighted Price  
-- Tick Spread, Volume Profile, Spread Cross, Micro‑Vol
-
-*(All 32 are distinct — no fillers.)*
+| CPU Frequency | Rough extrapolated latency |
+|---|---|
+| 3.0 GHz (measured) | ~46–50 ns |
+| 4.0 GHz (projected) | ~35–40 ns |
+| 5.0 GHz (projected) | ~28–32 ns |
 
 ---
 
-## ✨ Key Features
+## Why this architecture
 
-- **32 real microstructure features** – from EWMA to VPIN, covering the full alpha spectrum.
-- **Extensible plugin system** – Add custom feed parsers or feature calculators without modifying the core.
-- **Zero heap allocations** on the hot path – no `new`/`malloc` during parsing or computation.
-- **Lock‑free SPSC ring buffer** with cache‑line alignment – no false sharing.
-- **Double‑buffered order book** – seamless updates without locks.
-- **Header‑only C++23** – simply `#include <tachyon/tachyon.hpp>`.
-- **AVX2 + FMA** SIMD acceleration – uses `_mm256_fmadd_ps`, `_mm256_sqrt_ps`.
-- **Zero‑copy ITCH parser** – `reinterpret_cast` + `byteswap`, never touches heap.
+Typical prototyping pipelines parse market data in C++, hand it to Python for feature computation, then copy results back — adding microseconds of round-trip overhead per packet. Tachyon computes all 32 features inline during parsing, in the same pass, with no intermediate copies. Whether that's fast enough to matter in a real production system depends entirely on where the bottleneck actually is in that system (network, NIC timestamping, risk checks, exchange colocation) — this project doesn't claim to solve those, only the feature-computation step.
 
 ---
 
-## 🖥️ Hardware Requirements & Performance Scaling
+## The 32 microstructure features
 
-**Minimum CPU:** x86‑64 with **AVX2 + FMA** support (Intel Haswell / AMD Excavator or newer).  
+Computed with AVX2 FMA and branchless logic:
+
+- EWMA Price, OFI, Realized Volatility, Tick Rule
+- Book Pressure, Spread-to-Vol, Micro-Price, Depth Decay
+- Bid-Ask Balance, Weighted Mid, Order Book Slope
+- Liquidity Imbalance, VWAP, Trade Imbalance
+- Cumulative Depth (Bid/Ask), Effective/Quoted Spread
+- Log Return, Skew, Kurtosis, Price Impact
+- Order Flow Toxicity, VPIN, Volatility-of-Vol
+- Mid Price Range, Bid-Ask Cross, Depth-Weighted Price
+- Tick Spread, Volume Profile, Spread Cross, Micro-Vol
+
+---
+
+## Key technical features
+
+- Header-only C++23 — `#include <tachyon/tachyon.hpp>`
+- Zero-copy ITCH parser (`reinterpret_cast` + `byteswap`, never touches heap)
+- Zero heap allocations on the hot path (no `new`/`malloc` during parsing or feature computation)
+- Lock-free SPSC ring buffer, cache-line aligned (no false sharing)
+- Double-buffered order book state for lock-free updates
+- AVX2 + FMA SIMD (`_mm256_fmadd_ps`, `_mm256_sqrt_ps`)
+- Plugin system for custom features and feed formats
+
+---
+
+## Hardware & build requirements
+
+**Minimum CPU:** x86-64 with AVX2 + FMA (Intel Haswell / AMD Excavator or newer).
 **Compiler:** GCC 13+ or Clang 16+ with `-mavx2 -mfma`.
 
-Performance scales **linearly with CPU clock speed**. Benchmarks above were measured on a **3.0 GHz** CPU. Expect lower latencies at higher clock speeds:
-
-| CPU Frequency | Expected Latency (per packet) |
-|---------------|-------------------------------|
-| 3.0 GHz       | 50 ns                         |
-| 4.0 GHz       | 37 ns                         |
-| 5.0 GHz       | 30 ns                         |
-
-*Note:* Actual latency may vary due to OS scheduling, CPU throttling, and thermal conditions. For stable results, run the standalone `tachyon_live` benchmark with the CPU warmed up and power plan set to **High Performance**.
+Benchmarks above were run on a single 3.0 GHz laptop CPU with a High Performance power plan. Results will vary with OS scheduling, thermal throttling, and background load — this is not a controlled lab environment.
 
 ---
 
-## 📸 Visual Proof
+## Screenshots
 
-**Streamlit dashboard (Python batch):**
+**Streamlit dashboard (Python-wrapped batch path):**
 ![Tachyon Dashboard](docs/images/dashboard.png)
 
-**Pure C++ live capture (uncheatable benchmark):**
+**Pure C++ `rdtsc` capture (core engine path):**
 ![Live Capture Benchmark](docs/images/live_capture.png)
 
 ---
 
-## 🚀 Quick Start (Windows + MinGW)
+## Quick start (Windows + MinGW)
 
-### 1. Clone the repository
 ```bash
 git clone https://github.com/GamingBoyOfficial/Tachyon.git
 cd Tachyon
-```
-
-### 2. Build in Release mode
-```bash
 mkdir build && cd build
 cmake .. -G "MinGW Makefiles" -DCMAKE_BUILD_TYPE=Release
 cmake --build .
 cd ..
 ```
 
-### 3. Run the uncheatable benchmark (pure C++, no Python)
+Run the core-engine benchmark (pure C++, `rdtsc`, no Python):
 ```bash
 ./build/tachyon_live.exe sample_synthetic.ITCH
 ```
 
-Expected output:
-```
-Cycles/packet : 150.0
-Approx ns/pkt : 50.0 (assuming 3.0 GHz)
-Throughput : 20.01 M pkts/s (if 3 GHz)
-```
-
-### 4. Run the full P50/P99 benchmark
+Run the P50/P99 Google Benchmark suite:
 ```bash
 ./build/tachyon_bench.exe
 ```
 
-### 5. Run the plugin demo
+Run the plugin demo:
 ```bash
 ./build/tachyon_plugin_demo.exe
 ```
 
-### 6. Streamlit visual demo (optional, requires Python)
+Run the Streamlit demo (optional, requires Python — measures the Python-wrapped path, not the core engine):
 ```bash
 pip install streamlit pybind11 numpy pandas
 cd build
@@ -142,16 +132,13 @@ cd ..
 streamlit run app.py
 ```
 
-Then upload `sample_synthetic.ITCH` in the browser.
-
 ---
 
-## 🔌 Plugin System — Become Part of the Root
+## Plugin system
 
-Tachyon is designed to be extended. Anyone can write a plugin to add new features or support new feed formats.
+### Feature plugins
 
-### Feature Plugins
-Implement the `FeaturePlugin` interface:
+Implement `FeaturePlugin`:
 
 ```cpp
 #include <tachyon/features/feature_plugin.hpp>
@@ -161,101 +148,85 @@ struct MyPlugin : tachyon::FeaturePlugin {
 
     void compute(const tachyon::BookSnapshot& book,
                  float* output, size_t start_idx) noexcept override {
-        // custom feature: spread in basis points
         output[start_idx] = (book.ask_prices[0] - book.bid_prices[0]) * 100.0f;
     }
 };
 ```
 
-Register it before running:
-
+Register it:
 ```cpp
 tachyon::FeaturePluginRegistry::add(std::make_unique<MyPlugin>());
 ```
 
-### Feed Plugins
-Implement `FeedPlugin` to parse custom wire protocols (e.g., different exchange feeds). The built‑in `ItchParser` is just one implementation.
+### Feed plugins
 
-Contributions are welcome under the [Contributor License Agreement](CLA.md). All contributors assign copyright to the project owner, ensuring Tachyon remains a unified, legally protected platform.
+Implement `FeedPlugin` to parse other wire protocols — the built-in `ItchParser` is one implementation among possible others.
+
+Contributions are welcome under the [Contributor License Agreement](CLA.md).
 
 ---
 
-## 🏗 Architecture
+## Architecture
 
 ```
 ┌─────────────┐     ┌─────────────┐     ┌──────────────┐
 │  UDP / File  │────▶│ ItchParser  │────▶│  Calculator  │
-│  (raw bytes) │     │ (zero‑copy) │     │  (32 feats)  │
+│  (raw bytes) │     │ (zero-copy) │     │  (32 feats)  │
 └─────────────┘     └─────────────┘     └──────┬───────┘
                                                 │
                                          ┌──────▼───────┐
                                          │  SPSC Ring   │
-                                         │  (lock‑free) │
+                                         │  (lock-free) │
                                          └──────┬───────┘
                                                 │
                                          ┌──────▼───────┐
                                          │  Consumer    │
-                                         │  (Python/    │
+                                         │  (Python /   │
                                          │   C++ model) │
                                          └──────────────┘
 ```
 
-- **Zero‑copy** ITCH parser (reinterpret_cast + byteswap)
-- **Cache‑line aligned** feature vector (256 bytes, expandable)
-- **Lock‑free SPSC** ring buffer (no false sharing)
-- **Double‑buffered** order book state
-- **Zero heap allocations** on the hot path
-
 ---
 
-## 🧪 Testing & Benchmarking
+## Testing & benchmarking
 
-Run the unit tests:
 ```bash
-./tachyon_tests.exe
+./tachyon_tests.exe            # unit tests
+./tachyon_live.exe sample_synthetic.ITCH   # rdtsc core-engine benchmark
+./tachyon_bench.exe            # Google Benchmark suite
 ```
 
-Run the uncheatable benchmark (pure rdtsc, no Python):
-```bash
-./tachyon_live.exe sample_synthetic.ITCH
-```
-
-Run the Google Benchmark suite (if built):
-```bash
-./tachyon_bench.exe
-```
+**Roadmap for stronger validation** (tracked, not yet done):
+- [ ] Benchmark against multiple ITCH files with documented, varied message-type distributions
+- [ ] Report variance across many runs, not just a single P50/P99 pair
+- [ ] Compare against a naive (non-SIMD, non-zero-copy) baseline implementation
+- [ ] Compare against at least one named open-source ITCH parser, same file/machine
+- [ ] Independent reproduction on hardware other than the author's
 
 ---
 
-## 🤝 Contributing
+## Contributing
 
-Tachyon is open to contributions. Before submitting a pull request, please read:
+- [Contributor License Agreement](CLA.md) — required for all contributions.
+- [Code of Conduct](CODE_OF_CONDUCT.md).
 
-- [Contributor License Agreement](CLA.md) – required for all contributions.
-- [Code of Conduct](CODE_OF_CONDUCT.md) – be excellent to each other.
-
-All contributions are assigned to the project owner to protect the project’s future.
+Contributions are assigned to the project owner.
 
 ---
 
-## 🛡 Security
+## Security
 
-If you discover a security vulnerability, please **do not** open a public issue. Instead, contact the maintainer directly: [GamingBoyOfficial](https://github.com/GamingBoyOfficial) or via email.
-
----
-
-## 📜 License
-
-Tachyon is licensed under the **GNU Affero General Public License v3 (AGPL‑3.0)**.  
-See [LICENSE](LICENSE) for details.  
-Commercial use requires a separate license from the copyright holder.
+If you find a security issue, please don't open a public issue — contact [@GamingBoyOfficial](https://github.com/GamingBoyOfficial) directly.
 
 ---
 
-## 🌍 Author
+## License
 
-**Parikshit Sharma**  
-GitHub: [@GamingBoyOfficial](https://github.com/GamingBoyOfficial)  
+AGPL-3.0. See [LICENSE](LICENSE). Commercial use requires a separate license from the copyright holder.
+
+---
+
+## Author
+
+**Parikshit Sharma** — [@GamingBoyOfficial](https://github.com/GamingBoyOfficial)
 DOI: [10.5281/zenodo.21920230](https://doi.org/10.5281/zenodo.21920230)
-
-*"Latency is the ultimate edge. Tachyon gives it to you."*
