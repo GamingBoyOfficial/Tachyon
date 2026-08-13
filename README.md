@@ -8,3 +8,11 @@ eliminated dynamic memory allocation from the critical path, guaranteeing P99
 latencies equal to P50 averages. This engine allows trading models to react to
 market data nearly 4 full packets earlier than existing open-source solutions,
 effectively compressing the time-to-alpha to the physical limits of the CPU."
+
+## 📸 Visual Proof
+
+**Streamlit dashboard (Python batch):**
+![Tachyon Dashboard](docs/images/dashboard.png)
+
+**Pure C++ live capture (uncheatable benchmark):**
+![Live Capture Benchmark](docs/images/live_capture.png)
