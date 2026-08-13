@@ -84,6 +84,12 @@ Performance scales **linearly with CPU clock speed**. Benchmarks above were meas
 
 ---
 
+**Streamlit dashboard (Python batch):**
+![Tachyon Dashboard](docs/images/dashboard.png)
+
+**Pure C++ live capture (uncheatable benchmark):**
+![Live Capture Benchmark](docs/images/live_capture.png)
+
 ## 🔌 Plugin System — Become Part of the Root
 
 Tachyon is designed to be extended. Anyone can write a plugin to add new features or support new feed formats.
@@ -103,9 +109,3 @@ struct MyPlugin : tachyon::FeaturePlugin {
         output[start_idx] = (book.ask_prices[0] - book.bid_prices[0]) * 100.0f;
     }
 };
-
-**Streamlit dashboard (Python batch):**
-![Tachyon Dashboard](docs/images/dashboard.png)
-
-**Pure C++ live capture (uncheatable benchmark):**
-![Live Capture Benchmark](docs/images/live_capture.png)
