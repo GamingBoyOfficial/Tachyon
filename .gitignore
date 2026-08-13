@@ -29,3 +29,4 @@ env/
 *.log
 .tmptest.bin
 test.bin
+sample.ITCH
